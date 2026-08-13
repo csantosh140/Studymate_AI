@@ -1,0 +1,119 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  name         String?
+  passwordHash String
+  plan         String         @default("FREE")
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  notes        Note[]
+  jobs         AiJob[]
+  quizzes      Quiz[]
+  decks        FlashcardDeck[]
+  plans        StudyPlan[]
+  usageEvents  UsageEvent[]
+}
+
+model Note {
+  id         String   @id @default(cuid())
+  userId     String
+  title      String
+  content    String
+  sourceType String   @default("paste")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AiJob {
+  id         String    @id @default(cuid())
+  userId     String
+  feature    String
+  status     String    @default("SUCCEEDED")
+  inputJson  String
+  outputJson String?
+  error      String?
+  tokensUsed Int?
+  createdAt  DateTime  @default(now())
+  finishedAt DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Quiz {
+  id         String         @id @default(cuid())
+  userId     String
+  title      String
+  difficulty String
+  createdAt  DateTime       @default(now())
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questions  QuizQuestion[]
+}
+
+model QuizQuestion {
+  id          String @id @default(cuid())
+  quizId      String
+  type        String
+  prompt      String
+  optionsJson String?
+  answer      String
+  explanation String?
+  quiz        Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
+}
+
+model FlashcardDeck {
+  id        String      @id @default(cuid())
+  userId    String
+  title     String
+  createdAt DateTime    @default(now())
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cards     Flashcard[]
+}
+
+model Flashcard {
+  id     String        @id @default(cuid())
+  deckId String
+  front  String
+  back   String
+  deck   FlashcardDeck @relation(fields: [deckId], references: [id], onDelete: Cascade)
+}
+
+model StudyPlan {
+  id          String          @id @default(cuid())
+  userId      String
+  title       String
+  examDate    DateTime?
+  hoursPerDay Float
+  createdAt   DateTime        @default(now())
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items       StudyPlanItem[]
+}
+
+model StudyPlanItem {
+  id          String    @id @default(cuid())
+  planId      String
+  day         DateTime
+  subject     String
+  topic       String
+  durationMin Int
+  completed   Boolean   @default(false)
+  plan        StudyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+}
+
+model UsageEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  feature   String
+  tokensIn  Int      @default(0)
+  tokensOut Int      @default(0)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
