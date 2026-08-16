@@ -17,8 +17,8 @@ AI-powered **student utility web application** built with Next.js.
 
 - Next.js 16 (App Router) + TypeScript
 - Tailwind CSS
-- Prisma + SQLite (local)
-- OpenAI API
+- Prisma + PostgreSQL
+- OpenAI / Groq / Gemini API
 - JWT cookie sessions
 
 ## Setup
@@ -38,7 +38,7 @@ copy .env.example .env
 Edit `.env`:
 
 ```env
-DATABASE_URL="file:./dev.db"
+DATABASE_URL="postgresql://username:password@localhost:5432/studymate_db?schema=public"
 AUTH_SECRET="replace-with-a-long-random-string"
 OPENAI_API_KEY="sk-..."
 OPENAI_MODEL="gpt-4o-mini"
