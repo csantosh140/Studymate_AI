@@ -17,33 +17,8 @@ interface Message {
   ts: Date;
 }
 
-// Self-contained Speech Recognition types (no external package needed)
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-  resultIndex: number;
-}
-
-interface SpeechRecognitionInstance extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: Event) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-}
-
-interface SpeechRecognitionConstructor {
-  new(): SpeechRecognitionInstance;
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-  }
-}
+// Speech Recognition helper type
+type SpeechRecognitionType = any;
 
 export function VoiceAssistant() {
   const [open, setOpen] = useState(false);
@@ -56,11 +31,13 @@ export function VoiceAssistant() {
   const [ttsEnabled, setTtsEnabled] = useState(true);
   const [micAvailable, setMicAvailable] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionType>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (typeof window === "undefined") return;
+    const SR = (window as unknown as Record<string, SpeechRecognitionType>).SpeechRecognition ||
+               (window as unknown as Record<string, SpeechRecognitionType>).webkitSpeechRecognition;
     setMicAvailable(!!SR);
   }, []);
 
@@ -109,7 +86,8 @@ export function VoiceAssistant() {
       const json = await res.json();
 
       if (!res.ok) {
-        throw new Error(json.error || "Something went wrong");
+        const errorText = json.error?.message || (typeof json.error === "string" ? json.error : "Something went wrong");
+        throw new Error(errorText);
       }
 
       const data = json.data as {
@@ -142,7 +120,9 @@ export function VoiceAssistant() {
   }, [loading, messages, mode, speak]);
 
   const startRecording = useCallback(() => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (typeof window === "undefined") return;
+    const win = window as unknown as Record<string, any>;
+    const SR = win.SpeechRecognition || win.webkitSpeechRecognition;
     if (!SR) return;
 
     const recognition = new SR();
@@ -150,8 +130,8 @@ export function VoiceAssistant() {
     recognition.interimResults = false;
     recognition.lang = "en-US";
 
-    recognition.onresult = (e: SpeechRecognitionEvent) => {
-      const transcript = e.results[0]?.[0]?.transcript ?? "";
+    recognition.onresult = (e: any) => {
+      const transcript = e.results?.[0]?.[0]?.transcript ?? "";
       if (transcript) sendMessage(transcript);
     };
     recognition.onerror = () => setRecording(false);

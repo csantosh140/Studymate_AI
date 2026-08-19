@@ -32,6 +32,18 @@ export function handleApiError(error: unknown) {
     if (msg.includes("429") || msg.toLowerCase().includes("rate limit")) {
       return jsonError("AI provider rate limit hit. Please wait and retry.", 429);
     }
+    if (msg.includes("DATABASE_URL") || msg.includes("Error validating datasource")) {
+      return jsonError(
+        "Database is not configured. Please set the DATABASE_URL environment variable in your deployment platform settings (e.g. Vercel, Render, Railway).",
+        500
+      );
+    }
+    if (msg.includes("Table") && msg.includes("does not exist")) {
+      return jsonError(
+        "Database tables have not been created yet. Please run 'npx prisma db push' against your database.",
+        500
+      );
+    }
     return jsonError(msg || "Something went wrong.", 500);
   }
 

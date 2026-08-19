@@ -95,7 +95,7 @@ function getPreferredProviderName(): ProviderName {
 function getModelForProvider(provider: ProviderName) {
   switch (provider) {
     case "groq":
-      return process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+      return process.env.GROQ_MODEL || "qwen/qwen3.6-27b";
     case "gemini":
       return process.env.GEMINI_MODEL || "gemini-2.5-flash";
     case "ollama":

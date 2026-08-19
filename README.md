@@ -79,6 +79,29 @@ src/
 prisma/               # Database schema
 ```
 
+## Deployment Guide
+
+### 1. Database Setup (PostgreSQL)
+When deploying to cloud platforms (Vercel, Render, Railway, etc.), you need a cloud PostgreSQL database:
+- **Free Hosted PostgreSQL Providers**: [Neon.tech](https://neon.tech), [Supabase.com](https://supabase.com), or [Render.com](https://render.com).
+- Copy your connection string (e.g. `postgresql://user:password@host/dbname?sslmode=require`).
+
+### 2. Environment Variables
+Add the following Environment Variables in your deployment provider's Dashboard (e.g. **Vercel -> Settings -> Environment Variables**):
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@ep-xyz.neon.tech/neondb?sslmode=require` |
+| `AUTH_SECRET` | Secret key for JWT session signing | `random-long-secret-key-string` |
+| `GROQ_API_KEY` or `GEMINI_API_KEY` | AI Provider API key | `gsk_...` or `AIza...` |
+| `AI_PROVIDER` | AI provider choice | `groq` or `gemini` |
+
+### 3. Initialize Database Schema
+Run database migration/push against your cloud database:
+```bash
+npx prisma db push
+```
+
 ## API overview
 
 - `POST /api/auth/signup|login|logout`
@@ -86,3 +109,4 @@ prisma/               # Database schema
 - `POST /api/ai/summarize|quiz|explain|improve|flashcards|planner`
 - `GET /api/history`
 - `GET /api/usage`
+

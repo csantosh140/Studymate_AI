@@ -9,9 +9,17 @@ import {
 export type AiProvider = "openai" | "groq" | "gemini" | "ollama";
 
 const GEMINI_FALLBACK_MODELS = [
+  "gemini-3.6-flash",
+  "gemini-2.5-flash",
   "gemini-2.0-flash-lite",
   "gemini-1.5-flash-8b",
-  "gemini-1.5-flash",
+];
+
+const GROQ_FALLBACK_MODELS = [
+  "qwen/qwen3.6-27b",
+  "groq/compound",
+  "openai/gpt-oss-20b",
+  "llama-3.3-70b-versatile",
 ];
 
 let ollamaReachable: boolean | null = null;
@@ -48,12 +56,8 @@ export function isProviderConfigured(provider: AiProvider) {
 }
 
 export function getProviderChainSync(): AiProvider[] {
-  const preferred = process.env.AI_PROVIDER?.trim().toLowerCase();
-
-  if (preferred && preferred !== "auto") {
-    const p = preferred as AiProvider;
-    if (isProviderConfigured(p)) return [p];
-  }
+  const preferredStr = process.env.AI_PROVIDER?.trim().toLowerCase();
+  const preferred = preferredStr && preferredStr !== "auto" ? (preferredStr as AiProvider) : undefined;
 
   const chain: AiProvider[] = [];
   if (hasGroqKey()) chain.push("groq");
@@ -61,7 +65,15 @@ export function getProviderChainSync(): AiProvider[] {
   if (isOllamaEnabled()) chain.push("ollama");
   if (hasValidApiKey()) chain.push("openai");
 
-  return chain.length ? chain : hasGeminiKey() ? ["gemini"] : ["openai"];
+  if (!chain.length) {
+    return hasGeminiKey() ? ["gemini"] : ["openai"];
+  }
+
+  if (preferred && isProviderConfigured(preferred)) {
+    return [preferred, ...chain.filter((p) => p !== preferred)];
+  }
+
+  return chain;
 }
 
 export async function getProviderChain(): Promise<AiProvider[]> {
@@ -80,7 +92,7 @@ export function getActiveProvider(): AiProvider {
 export function getModel(provider: AiProvider = getActiveProvider(), geminiModelOverride?: string) {
   switch (provider) {
     case "groq":
-      return process.env.GROQ_MODEL?.trim() || "llama-3.3-70b-versatile";
+      return process.env.GROQ_MODEL?.trim() || "qwen/qwen3.6-27b";
     case "gemini":
       return geminiModelOverride || process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
     case "ollama":
@@ -155,6 +167,27 @@ export function isQuotaError(error: unknown) {
       msg.includes("billing") ||
       msg.includes("rate limit") ||
       msg.includes("exceeded")
+    );
+  }
+  return false;
+}
+
+export function isModelNotFoundError(error: unknown): boolean {
+  if (error instanceof OpenAI.APIError) {
+    return error.status === 404 || error.status === 400 || error.status === 413;
+  }
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    return (
+      msg.includes("does not exist") ||
+      msg.includes("not found") ||
+      msg.includes("decommissioned") ||
+      msg.includes("no longer available") ||
+      msg.includes("request entity too large") ||
+      msg.includes("request_too_large") ||
+      msg.includes("404") ||
+      msg.includes("400") ||
+      msg.includes("413")
     );
   }
   return false;
@@ -252,7 +285,7 @@ async function geminiCompletionWithModel(
 
 async function geminiCompletion(params: CompletionParams): Promise<CompletionResult> {
   const primary = getModel("gemini");
-  const models = [primary, ...GEMINI_FALLBACK_MODELS.filter((m) => m !== primary)];
+  const models = Array.from(new Set([primary, ...GEMINI_FALLBACK_MODELS]));
 
   let lastError: Error | null = null;
 
@@ -270,7 +303,7 @@ async function geminiCompletion(params: CompletionParams): Promise<CompletionRes
           lastError = retryErr instanceof Error ? retryErr : lastError;
         }
       }
-      if (isQuotaError(error)) continue;
+      if (isQuotaError(error) || isModelNotFoundError(error)) continue;
       throw lastError;
     }
   }
@@ -282,26 +315,45 @@ async function openAiCompatibleCompletion(
   provider: "openai" | "groq" | "ollama",
   params: CompletionParams,
 ): Promise<CompletionResult> {
-  const model = getModel(provider);
-  const completion = await getOpenAiCompatibleClient(provider).chat.completions.create({
-    model,
-    temperature: params.temperature,
-    response_format: params.jsonMode ? { type: "json_object" } : undefined,
-    messages: [
-      { role: "system", content: params.system },
-      { role: "user", content: params.user },
-    ],
-  });
+  const primaryModel = getModel(provider);
+  const modelsToTry = provider === "groq"
+    ? Array.from(new Set([primaryModel, ...GROQ_FALLBACK_MODELS]))
+    : [primaryModel];
 
-  const content = completion.choices[0]?.message?.content?.trim();
-  if (!content) throw new Error(`${getProviderLabel(provider)} returned an empty response.`);
+  let lastError: Error | null = null;
 
-  return {
-    content,
-    tokensIn: completion.usage?.prompt_tokens ?? 0,
-    tokensOut: completion.usage?.completion_tokens ?? 0,
-    model,
-  };
+  for (const model of modelsToTry) {
+    try {
+      const completion = await getOpenAiCompatibleClient(provider).chat.completions.create({
+        model,
+        temperature: params.temperature,
+        max_tokens: provider === "groq" ? 4096 : undefined,
+        response_format: params.jsonMode ? { type: "json_object" } : undefined,
+        messages: [
+          { role: "system", content: params.system },
+          { role: "user", content: params.user },
+        ],
+      });
+
+      const content = completion.choices[0]?.message?.content?.trim();
+      if (!content) throw new Error(`${getProviderLabel(provider)} returned an empty response.`);
+
+      return {
+        content,
+        tokensIn: completion.usage?.prompt_tokens ?? 0,
+        tokensOut: completion.usage?.completion_tokens ?? 0,
+        model,
+      };
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(`${getProviderLabel(provider)} error`);
+      if (provider === "groq" && isModelNotFoundError(error)) {
+        continue;
+      }
+      throw lastError;
+    }
+  }
+
+  throw lastError ?? new Error(`All ${getProviderLabel(provider)} models failed.`);
 }
 
 export async function runCompletion(

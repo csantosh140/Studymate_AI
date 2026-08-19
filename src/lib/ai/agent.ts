@@ -84,7 +84,8 @@ Plan rules:
 - Available study time: ${hoursPerDay} hours/day across all subjects.
 - Spread sessions evenly until the exam. Include review days near the end.
 - Each dayOffset should have sessions whose durationMin totals roughly ${Math.round(hoursPerDay * 60)} minutes.
-- Cover all subjects: ${subjects.join(", ")}.`),
+- Cover all subjects: ${subjects.join(", ")}.
+- Generate a maximum of 30-40 total study plan items by grouping sessions into key study days and milestones so the schedule remains high-value and concise.`),
 };
 
 export function buildUserPrompt(label: string, content: string) {
